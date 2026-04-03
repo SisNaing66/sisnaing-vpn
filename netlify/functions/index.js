@@ -1,8 +1,9 @@
+const https = require('https');
+
 const btoa = (str) => Buffer.from(str).toString('base64');
 const atob = (str) => Buffer.from(str, 'base64').toString('utf-8');
 
 exports.handler = async (event) => {
-    const fetch = (await import('node-fetch')).default;
     const { url: subUrl, bug = 'mpt.com.mm', sni = 'premium.galaxy1.my.id', port = '443' } = event.queryStringParameters;
 
     if (!subUrl) {
@@ -26,56 +27,59 @@ exports.handler = async (event) => {
                     <h2 style="text-align:center; color:#007bff;">SisNaing Sub Transformer</h2>
                     <form action="/.netlify/functions/index" method="GET">
                         <label>3x-ui Sub Link:</label>
-                        <input type="text" name="url" placeholder="http://your-vps:2096/sub/..." required>
+                        <input type="text" name="url" placeholder="http://..." required>
                         <label>Bug (Address):</label>
                         <input type="text" name="bug" value="mpt.com.mm">
                         <label>SNI / Host:</label>
                         <input type="text" name="sni" value="premium.galaxy1.my.id">
                         <label>Port:</label>
                         <input type="text" name="port" value="443">
-                        <button type="submit">Generate Final Sub Link</button>
+                        <button type="submit">Generate Sub Link</button>
                     </form>
-                    <p style="font-size: 12px; color: #666; margin-top: 15px;">* ရလာတဲ့လင့်ခ်ကို User App မှာထည့်ရင် GB/Date ပေါ်ပါမယ်။</p>
                 </div>
             </body>
             </html>`
         };
     }
 
-    try {
-        const response = await fetch(subUrl);
-        const userInfo = response.headers.get('subscription-userinfo');
-        const textData = await response.text();
-        const decodedData = atob(textData);
-        const links = decodedData.split('\n');
-
-        const transformedLinks = links.map(link => {
-            if (link.startsWith('vless://')) {
+    return new Promise((resolve) => {
+        https.get(subUrl, (res) => {
+            const userInfo = res.headers['subscription-userinfo'];
+            let data = '';
+            res.on('data', (chunk) => { data += chunk; });
+            res.on('end', () => {
                 try {
-                    const vUrl = new URL(link);
-                    vUrl.hostname = bug;
-                    vUrl.port = port;
-                    vUrl.searchParams.set('security', 'tls');
-                    vUrl.searchParams.set('sni', sni);
-                    vUrl.searchParams.set('host', sni);
-                    vUrl.searchParams.set('type', 'ws');
-                    return vUrl.toString();
-                } catch (e) { return link; }
-            }
-            return link;
-        });
+                    const decodedData = atob(data);
+                    const links = decodedData.split('\n');
+                    const transformedLinks = links.map(link => {
+                        if (link.startsWith('vless://')) {
+                            const vUrl = new URL(link);
+                            vUrl.hostname = bug;
+                            vUrl.port = port;
+                            vUrl.searchParams.set('security', 'tls');
+                            vUrl.searchParams.set('sni', sni);
+                            vUrl.searchParams.set('host', sni);
+                            vUrl.searchParams.set('type', 'ws');
+                            return vUrl.toString();
+                        }
+                        return link;
+                    });
 
-        const finalData = btoa(transformedLinks.join('\n'));
-        return {
-            statusCode: 200,
-            headers: {
-                'Content-Type': 'text/plain; charset=utf-8',
-                'Subscription-Userinfo': userInfo || '',
-                'Access-Control-Allow-Origin': '*'
-            },
-            body: finalData
-        };
-    } catch (e) {
-        return { statusCode: 500, body: "Error: Could not fetch sub link." };
-    }
+                    resolve({
+                        statusCode: 200,
+                        headers: {
+                            'Content-Type': 'text/plain; charset=utf-8',
+                            'Subscription-Userinfo': userInfo || '',
+                            'Access-Control-Allow-Origin': '*'
+                        },
+                        body: btoa(transformedLinks.join('\n'))
+                    });
+                } catch (e) {
+                    resolve({ statusCode: 500, body: "Error processing data" });
+                }
+            });
+        }).on('error', (e) => {
+            resolve({ statusCode: 500, body: "Fetch Error: " + e.message });
+        });
+    });
 };
