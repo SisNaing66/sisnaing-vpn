@@ -1,4 +1,5 @@
 const https = require('https');
+const http = require('http');
 
 const btoa = (str) => Buffer.from(str).toString('base64');
 const atob = (str) => Buffer.from(str, 'base64').toString('utf-8');
@@ -33,7 +34,6 @@ exports.handler = async (event) => {
         select, input { width: 100%; padding: 15px; border-radius: 15px; border: 2px solid #eee; font-size: 14px; box-sizing: border-box; outline: none; transition: 0.3s; background: #fdfdfd; }
         select:focus, input:focus { border-color: var(--primary); }
         .btn-generate { width: 100%; padding: 16px; background: linear-gradient(90deg, #7c4dff, #b388ff); color: white; border: none; border-radius: 15px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 25px; box-shadow: 0 5px 15px rgba(124, 77, 255, 0.3); }
-        .btn-generate:active { transform: scale(0.98); }
         .footer-note { font-size: 11px; color: #999; text-align: center; margin-top: 20px; }
     </style>
 </head>
@@ -43,13 +43,11 @@ exports.handler = async (event) => {
             <h2>Config Transformer</h2>
             <span style="font-size: 20px;">🌙</span>
         </div>
-        
         <div class="tabs">
             <div class="tab active">Single</div>
             <div class="tab">Bulk</div>
             <div class="tab">History</div>
         </div>
-
         <form action="/.netlify/functions/index" method="GET">
             <label>Port</label>
             <div class="port-grid" id="portGrid">
@@ -61,31 +59,21 @@ exports.handler = async (event) => {
                 <div class="port-item" onclick="selectPort('8443', this)">8443</div>
             </div>
             <input type="hidden" name="port" id="selectedPort" value="443">
-
             <label>Bug (Address Target)</label>
             <select name="bug">
                 <option value="mpt.com.mm">mpt.com.mm</option>
                 <option value="speedtest.net">speedtest.net</option>
                 <option value="wavemoney.com.mm">wavemoney.com.mm</option>
-                <option value="truemoney.com.mm">truemoney.com.mm</option>
-                <option value="mizzima.com">mizzima.com</option>
-                <option value="yomabank.com">yomabank.com</option>
-                <option value="mymedicine.com.mm">mymedicine.com.mm</option>
                 <option value="custom">Custom...</option>
             </select>
-
             <label>Original Domain (SNI/Host)</label>
             <input type="text" name="sni" value="premium.result69.my.id">
-
             <label>3x-ui Sub Link</label>
             <input type="text" name="url" placeholder="Paste Sub Link here..." required>
-
             <button type="submit" class="btn-generate">Transform Config</button>
         </form>
-
         <div class="footer-note">SisNaing VPN Service &copy; 2026</div>
     </div>
-
     <script>
         function selectPort(port, el) {
             document.querySelectorAll('.port-item').forEach(i => i.classList.remove('active'));
@@ -99,7 +87,8 @@ exports.handler = async (event) => {
     }
 
     return new Promise((resolve) => {
-        https.get(subUrl, (res) => {
+        const client = subUrl.startsWith('https') ? https : http;
+        client.get(subUrl, (res) => {
             const userInfo = res.headers['subscription-userinfo'];
             let data = '';
             res.on('data', (chunk) => { data += chunk; });
@@ -108,15 +97,17 @@ exports.handler = async (event) => {
                     const decodedData = atob(data);
                     const links = decodedData.split('\n');
                     const transformedLinks = links.map(link => {
-                        if (link.startsWith('vless://')) {
-                            const vUrl = new URL(link);
-                            vUrl.hostname = bug;
-                            vUrl.port = port;
-                            vUrl.searchParams.set('security', 'tls');
-                            vUrl.searchParams.set('sni', sni);
-                            vUrl.searchParams.set('host', sni);
-                            vUrl.searchParams.set('type', 'ws');
-                            return vUrl.toString();
+                        if (link.trim().startsWith('vless://')) {
+                            try {
+                                const vUrl = new URL(link.trim());
+                                vUrl.hostname = bug;
+                                vUrl.port = port;
+                                vUrl.searchParams.set('security', 'tls');
+                                vUrl.searchParams.set('sni', sni);
+                                vUrl.searchParams.set('host', sni);
+                                vUrl.searchParams.set('type', 'ws');
+                                return vUrl.toString();
+                            } catch (e) { return link; }
                         }
                         return link;
                     });
@@ -131,7 +122,7 @@ exports.handler = async (event) => {
                         body: btoa(transformedLinks.join('\n'))
                     });
                 } catch (e) {
-                    resolve({ statusCode: 500, body: "Error processing data" });
+                    resolve({ statusCode: 500, body: "Error processing links." });
                 }
             });
         }).on('error', (e) => {
@@ -139,3 +130,4 @@ exports.handler = async (event) => {
         });
     });
 };
+
